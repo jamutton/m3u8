@@ -13,6 +13,7 @@ to_binary(#{} = M3U8) ->
           format(M3U8, target_duration, ?EXT_X_TARGETDURATION),
           format(M3U8, version, ?EXT_X_VERSION),
           format(M3U8, media_sequence, ?EXT_X_MEDIA_SEQUENCE),
+          format(M3U8, discontinuity_sequence, ?EXT_X_DISCONTINUITY_SEQUENCE),
           format(M3U8, program_date_time, ?EXT_X_PROGRAM_DATE_TIME),
           format(M3U8, allow_cache, ?EXT_X_ALLOW_CACHE),
           case M3U8 of
@@ -38,23 +39,31 @@ format(M3U8, Field, Name, Defaults) ->
     Value -> <<(w_to_binary(Name))/binary, (w_to_binary(Value))/binary>>
   end.
 
-segments(#{segments := Segments, keys := Keys}) ->
-  segments(Segments, Keys).
-
-segments([], _) ->
+segments(#{segments := Segments}) ->
+  segments(Segments);
+segments([]) ->
   [];
-segments([endlist|Segments], Keys) ->
-  [<<?EXT_X_ENDLIST>>|segments(Segments, Keys)];
-segments([discontinuity|Segments], []) ->
-  [<<?EXT_X_DISCONTINUITY>>|segments(Segments, [])];
-segments([Segment|Segments], []) ->
-  [segment(Segment)|segments(Segments, [])];
-segments([discontinuity|Segments], [discontinuity|Keys]) ->
-  [<<?EXT_X_DISCONTINUITY>>|segments(Segments, Keys)];
-segments([Segment|Segments], [discontinuity|_] = Keys) ->
-  [segment(Segment)|segments(Segments, Keys)];
-segments([Segment|Segments], [Key|Keys]) ->
-  [key(Key), segment(Segment)|segments(Segments, Keys)].
+segments([endlist|Segments]) ->
+  [<<?EXT_X_ENDLIST>>|segments(Segments)];
+segments([discontinuity|Segments]) ->
+  [<<?EXT_X_DISCONTINUITY>>|segments(Segments)];
+segments([cuein|Segments]) ->
+  [<<?EXT_X_CUE_IN>>|segments(Segments)];
+segments([<<?EXT_X_CUE_OUT, Data/binary>>|Segments]) ->
+  [<<?EXT_X_CUE_OUT, Data/binary>>|segments(Segments)];
+segments([<<?EXT_X_CUE_OUT_CONT, Data/binary>>|Segments]) ->
+  [<<?EXT_X_CUE_OUT_CONT, Data/binary>>|segments(Segments)];
+segments([#{method := Method, iv := IV, uri := URI}|Segments]) ->
+  [<<?EXT_X_KEY,
+    "METHOD=",(w_to_binary(Method))/binary,",URI=\"",
+    (w_to_binary(URI))/binary,
+    "\",IV=",
+    (w_to_binary(IV))/binary>>|segments(Segments)];
+segments([#{method := <<"NONE">>}|Segments]) ->
+  [<<?EXT_X_KEY,
+    "METHOD=NONE">>|segments(Segments)];
+segments([Segment|Segments]) ->
+  [segment(Segment)|segments(Segments)].
 
 segment(#{sub_range_length := SubRangeLength,
           sub_range_start := SubRangeStart,
@@ -99,6 +108,13 @@ key(#{method := <<"AES-128">>, iv := IV, uri := URI}) ->
     (w_to_binary(URI))/binary,
     "\",IV=",
     (w_to_binary(IV))/binary>>;
+key(#{method := <<"SAMPLE-AES">>, iv := IV, uri := URI}) ->
+  <<?EXT_X_KEY,
+    "KEYFORMATVERSIONS=\"1\",METHOD=SAMPLE-AES,URI=\"",
+    (w_to_binary(URI))/binary,
+    "\",IV=",
+    (w_to_binary(IV))/binary,
+    ",KEYFORMAT=\"com.apple.streamingkeydelivery\"">>;
 key(#{method := <<"NONE">>}) ->
   <<?EXT_X_KEY,
     "METHOD=NONE">>.

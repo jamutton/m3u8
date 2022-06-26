@@ -66,7 +66,7 @@ parse([<<?EXT_X_DISCONTINUITY>>|Lines],
       #{header := true,
         playlist := false,
         segment := false,
-        playlist_end := false} = State) when length(Segments) > 0 ->
+        playlist_end := false} = State) ->
   parse(Lines, M3U8#{segments => [discontinuity|Segments],
                      keys => [discontinuity|Keys]}, State);
 
@@ -81,6 +81,28 @@ parse([<<?EXT_X_KEY, Data/binary>>|Lines],
     M3U80 ->
       parse(Lines, M3U80, State)
   end;
+
+parse([<<?EXT_X_CUE_IN>>|Lines],
+  #{segments := Segments} = M3U8,
+  #{header := true,
+    playlist := false,
+    segment := false,
+    playlist_end := false} = State) ->
+  parse(Lines, M3U8#{segments => [cuein|Segments]}, State);
+
+parse([<<?EXT_X_CUE_OUT, Data/binary>>|Lines],
+  #{segments := Segments} = M3U8,
+  #{header := true,
+    playlist := false,
+    playlist_end := false} = State) ->
+  parse(Lines, M3U8#{segments => [<<?EXT_X_CUE_OUT, Data/binary>>|Segments]}, State);
+
+parse([<<?EXT_X_CUE_OUT_CONT, Data/binary>>|Lines],
+  #{segments := Segments} = M3U8,
+  #{header := true,
+    playlist := false,
+    playlist_end := false} = State) ->
+  parse(Lines, M3U8#{segments => [<<?EXT_X_CUE_OUT_CONT, Data/binary>>|Segments]}, State);
 
 % TODO: EXT-X-MAP
 
@@ -123,7 +145,19 @@ parse([<<?EXT_X_MEDIA_SEQUENCE, S/binary>>|Lines],
       {error, invalid_ext_x_media_sequence}
   end;
 
-% TODO: EXT-X-DISCONTINUITY-SEQUENCE
+parse([<<?EXT_X_DISCONTINUITY_SEQUENCE, S/binary>>|Lines],
+  #{discontinuity_sequence := undefined} = M3U8,
+  #{header := true,
+    playlist := false,
+    segment := false} = State) ->
+  case bucbinary:is_integer(S) of
+    true ->
+      parse(Lines,
+        M3U8#{discontinuity_sequence => bucs:to_integer(S)},
+        State);
+    false ->
+      {error, invalid_ext_x_media_sequence}
+  end;
 
 parse([<<?EXT_X_ENDLIST>>|Lines],
       #{segments := Segments} = M3U8,
@@ -213,9 +247,21 @@ parse([URI|Lines],
       #{header := true,
         playlist := false,
         segment := Segment,
-        playlist_end := false} = State) when is_map(Segment) ->
+        prepend := Prepend,
+        playlist_end := false} = State) when is_map(Segment) and Prepend /= false ->
   parse(Lines,
-        M3U8#{segments => [Segment#{uri => URI}|Segments]},
+        M3U8#{segments => [Segment#{uri => Prepend ++ URI}|Segments]},
+        State#{segment => false});
+parse([URI|Lines],
+      #{segments := Segments} = M3U8,
+      #{header := true,
+        playlist := false,
+        segment := Segment,
+        prepend := Prepend,
+        playlist_end := false} = State) when is_map(Segment) ->
+  %io:format("Could produce: ~p~p~n", [Prepend, URI]),
+  parse(Lines,
+        M3U8#{segments => [Segment#{uri => <<Prepend/binary, URI/binary>>}|Segments]},
         State#{segment => false});
 
 % Playlist URI
@@ -231,8 +277,11 @@ parse([URI|Lines],
 
 parse([<<>>|Lines], M3U8, State) ->
   parse(Lines, M3U8, State);
-parse([X|_], _, _) ->
+parse([X|Lines], Y, Z) ->
+  io:format("invalid entry from line: ~p, ~p, ~p~n", [X, Y, Z]),
+  io:format("upcoming lines: ~p~n", [Lines]),
   {error, invalid_entry, X}.
+
 
 % -----------------------------------------------------------------------------
 
@@ -299,7 +348,7 @@ parse_extinf(Data, #{segment := Segment} = State) ->
       end
   end.
 
-parse_ext_x_key(Data, #{keys := Keys} = M3U8) ->
+parse_ext_x_key(Data, #{segments := Keys} = M3U8) ->
   Keys0 = get_attr(Data, <<"METHOD">>, #{}, method),
   Keys1 = get_quoted_attr(Data, <<"URI">>, Keys0, uri),
   Keys2 = get_attr(Data, <<"IV">>, Keys1, iv),
@@ -307,9 +356,11 @@ parse_ext_x_key(Data, #{keys := Keys} = M3U8) ->
   Keys4 = get_quoted_attr(Data, <<"KEYFORMATVERSIONS">>, Keys3, keyformatversions),
   case Keys4 of
     #{method := <<"AES-128">>, uri := _} ->
-      M3U8#{keys => [Keys4|Keys]};
+      M3U8#{segments => [Keys4|Keys]};
+    #{method := <<"SAMPLE-AES">>, uri := _} ->
+      M3U8#{segments => [Keys4|Keys]};
     #{method := <<"NONE">>} ->
-      M3U8#{keys => [Keys4|Keys]};
+      M3U8#{segments => [Keys4|Keys]};
     _ ->
       error
   end.

@@ -3,6 +3,7 @@
 
 -export([
          parse/1
+         , parse/2
          , download/2
          , to_binary/1
          , to_file/2
@@ -15,6 +16,8 @@
          , target_duration/1
          , media_sequence/2
          , media_sequence/1
+         , discontinuity_sequence/1
+         , discontinuity_sequence/2
          , program_datetime/2
          , program_datetime/1
          , allow_cache/2
@@ -49,6 +52,7 @@
           , target_duration => integer() | undefined
           , version => integer() | undefined
           , media_sequence => integer() | undefined
+          , discontinuity_sequence => integer() | undefined
           , program_date_time => binary() | undefined
           , allow_cache => boolean() | undefined
           , i_frames_only => boolean() | undefined
@@ -258,6 +262,13 @@ do_video_codec_code(_, _) -> undefined.
 % @end
 -spec parse(file:filename_all() | uri() | binary() | string()) -> {ok, m3u8()} | {error, term()}.
 parse(Data) ->
+  parse(Data, false).
+
+% @doc
+% Parse a m3u8 file
+% @end
+-spec parse(file:filename_all() | uri() | binary() | string(), uri() | binary() | string()) -> {ok, m3u8()} | {error, term()}.
+parse(Data, Prepend) ->
   case read_m3u8(Data) of
     {ok, Binary} ->
       Lines = binary:split(Binary, [<<"\n">>, <<"\r\n">>], [global, trim]),
@@ -272,7 +283,8 @@ parse(Data) ->
                             #{segment => false,
                               header => false,
                               playlist_end => false,
-                              playlist => false});
+                              playlist => false,
+							  prepend => Prepend});
     Error ->
       Error
   end.
@@ -387,6 +399,22 @@ media_sequence(#{media_sequence := MediaSequence}) ->
   MediaSequence.
 
 % @doc
+% Set m3u8 discontinuity sequence
+% @end
+-spec discontinuity_sequence(m3u8(), integer()) -> {ok, m3u8()} | {error, invalid_discontinuity_sequence}.
+discontinuity_sequence(M3U8, DiscontinuitySequence) when is_map(M3U8), is_integer(DiscontinuitySequence) ->
+  {ok, M3U8#{discontinuity_sequence => DiscontinuitySequence}};
+discontinuity_sequence(_, _) ->
+  {error, invalid_discontinuity_sequence}.
+
+% @doc
+% Get m3u8 discontinuity sequence
+% @end
+-spec discontinuity_sequence(m3u8()) -> integer() | undefined.
+discontinuity_sequence(#{discontinuity_sequence := DiscontinuitySequence}) ->
+  DiscontinuitySequence.
+
+% @doc
 % Set m3u8 program datetime
 % @end
 -spec program_datetime(m3u8(), binary()) -> {ok, m3u8()} | {error, invalid_program_date_time}.
@@ -459,6 +487,9 @@ segment(#{segments := Segments} = M3U8, Segment) when is_map(M3U8),
 segment(#{segments := Segments} = M3U8, discontinuity) when is_map(M3U8),
                                                             is_list(Segments) ->
   {ok, M3U8#{segments => Segments ++ [discontinuity]}};
+segment(#{segments := Segments} = M3U8, endlist) when is_map(M3U8),
+                                                            is_list(Segments) ->
+  {ok, M3U8#{segments => Segments ++ [endlist]}};
 segment(_, _) ->
   {error, invalid_segment}.
 

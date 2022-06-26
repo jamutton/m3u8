@@ -3,6 +3,7 @@
           , target_duration => undefined
           , version => undefined
           , media_sequence => undefined
+          , discontinuity_sequence => undefined
           , program_date_time => undefined
           , allow_cache => undefined
           , i_frames_only => undefined
@@ -24,13 +25,16 @@
 % TODO: EXT-X-DATERANGE
 -define(EXT_X_TARGETDURATION, "#EXT-X-TARGETDURATION:").
 -define(EXT_X_MEDIA_SEQUENCE, "#EXT-X-MEDIA-SEQUENCE:").
-% TODO: EXT-X-DISCONTINUITY-SEQUENCE
+-define(EXT_X_DISCONTINUITY_SEQUENCE, "#EXT-X-DISCONTINUITY-SEQUENCE:").
 -define(EXT_X_ENDLIST, "#EXT-X-ENDLIST").
 -define(EXT_X_PLAYLIST_TYPE, "#EXT-X-PLAYLIST-TYPE:").
 -define(EXT_X_I_FRAMES_ONLY, "#EXT-X-I-FRAMES-ONLY").
 -define(EXT_X_MEDIA, "#EXT-X-MEDIA:").
 -define(EXT_X_STREAM_INF, "#EXT-X-STREAM-INF:").
 -define(EXT_X_I_FRAME_STREAM_INF, "#EXT-X-I-FRAME-STREAM-INF:").
+-define(EXT_X_CUE_OUT_CONT, "#EXT-X-CUE-OUT-CONT:").
+-define(EXT_X_CUE_OUT, "#EXT-X-CUE-OUT:").
+-define(EXT_X_CUE_IN, "#EXT-X-CUE-IN").
 % TODO: EXT-X-SESSION-DATA
 % TODO: EXT-X-SESSION-KEY
 % TODO: EXT-X-INDEPENDENT-SEGMENTS
